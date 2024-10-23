@@ -48,7 +48,42 @@ class YoloPascalVocDataset(Dataset):
         grid_size_x=data.size(dim=2)/config.S #pytorch has channl, height, width
         grid_size_y=data.size(dim=1)/ config.S 
   
-        
+        # Processing bounding boxes into S x S x (5B+C) ground truth tensor
+
+        boxes={} # for tracking how many bounding boxes have been assigned to grid cell
+        class_names={} # for tracking what class each grid cell has been assigned to
+        depth=5*config.B+ config.C
+        ground_truth=torch.zeros((config.S, config.S, depth))
+        for j, bbox_pair in enumerate(utils.get_bounding_box(label)):
+            name, coords=bbox_pair
+            assert name in self.classes, f'Unrecognized class {name}'
+            class_index=self.classes[name]
+            x_min, x_max, y_min, y_max=coords
+
+        # augment labels
+        if self.augment:
+            half_width=config.IMAGE_SIZE[0]/2 #for reference coordinatee(center of image)
+            half_height=config.IMAGE_SIZE[1]/2
+            x_min=utils.scale_bbox_coord(x_min, half_width, scale) + x_shift
+            x_max=utils.scale_bbox_coord(x_max, half_height, scale)+ x_shift
+            y_min=utils.scale_bbox_coord(y_min, half_width, scale) + y_shift
+            y_max=utils.scale_bbox_coord(y_max, half_height, scale)+ y_shift
+
+        #calculating the position of center for BB:
+        mid_x=(x_max+x_min)/2
+        mid_y=(y_min+y_max)/2
+        col=int(mid_x // grid_size_x)
+        row=int(mid_y // grid_size_y)
+
+        if 0<=col<config.S and 0<=row<config.S:
+            cell=(row, col)
+            if cell not in class_names or name==class_names[cell]:
+                #inserting class one-hot(binary vector) into ground truth
+                one_hot=torch.zeros(config.C)
+                one_hot[class_index]=1.0
+                ground_truth[row, col, :config.C]=one_hot
+                class_names[cell]=name
+
 
     def __len__(self):
         return len(self.dataset)
