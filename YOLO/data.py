@@ -84,6 +84,28 @@ class YoloPascalVocDataset(Dataset):
                 ground_truth[row, col, :config.C]=one_hot
                 class_names[cell]=name
 
+        #inserting bounding box into ground truth:
+        bbox_index=boxes.get(cell, 0)
+        if bbox_index<config.B:
+            bbox_truth=(
+                (mid_x - col * grid_size_x) / config.IMAGE_SIZE[0], # X coord relative to grid square
+                (mid_y - row * grid_size_y) / config.IMAGE_SIZE[1], # Y coord relative to gird square
+                (x_max - x_min) / config.IMAGE_SIZE[0],             # width 
+                (y_max - y_min ) / config.IMAGE_SIZE[1],            # Height
+                1.0                                                 # Confidence
+             )
+        
+        #Filling all bbox slots with current bbox which prevents from having "dead" boxes (zeros) at the end
+            bbox_start=5*bbox_index+ config.C
+            ground_truth[row, col, bbox_start:]=torch.tensor(bbox_truth).repeat(config.B- config.C)
+            boxes[cell]=bbox_index + 1
+
+        return data, ground_truth, original_data
 
     def __len__(self):
         return len(self.dataset)
+    
+if __name__ == '__main__':
+    obj_classes=utils.load_class_array()
+    train_set=YoloPascalVocDataset('train', normalize=True, augment=True)
+    
